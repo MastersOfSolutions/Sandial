@@ -14,7 +14,7 @@ class MovingLockoutError(IOError):
 class HeartbeatSync(object):
     def __init__(self):
         self.next_heartbeat = None
-        self.beat_tdelta = datetime.timedelta(microseconds=500000)
+        self.beat_tdelta = datetime.timedelta(microseconds=50000)
         self.beat_sleep = self.beat_tdelta.seconds + (self.beat_tdelta.microseconds / 1000000.0)
 
     def heartbeat_sync(self):
@@ -36,6 +36,38 @@ class HeartbeatSync(object):
             self.next_heartbeat = None
 
 
+class BuddySync(object):
+    def __init__(self, req_buddies=2):
+        self.req_buddies = req_buddies
+        self.cur_buddies = 0
+        self.evt_go = threading.Event()
+        self.dummy_evt_go = threading.Event()
+        self.dummy_cur_buddies = 0
+
+    def buddy_up(self):
+        if self.cur_buddies == (self.req_buddies - 1):
+            self._flush_buddies()
+        else:
+            self.cur_buddies += 1
+            self._wait_for_buddy()
+
+    def _flush_buddies(self):
+        self.evt_go.set()
+        self.cur_buddies = 0
+        self.evt_go.clear()
+
+    def _wait_for_buddy(self):
+        self.evt_go.wait(5)
+        # self.dummy_evt_go.set()
+        # self.dummy_cur_buddies = 0
+        # self.dummy_evt_go.clear()
+
+    def wait_for_buddy2(self):
+        while not self.evt_go.is_set:
+            if self.cur_buddies == self.req_buddies:
+                self._flush_buddies()
+
+
 class SketchController(object):
     DEFAULT_V = 3
 
@@ -46,6 +78,7 @@ class SketchController(object):
         self.x = 0.0
         self.y = 0.0
         self.heartbeat = HeartbeatSync()
+        self.buddysync = BuddySync()
         #self.x = threading.Value('d', 0.0, lock=self._x_lock)
         #self.y = multiprocessing.Value('d', 0.0, lock=self._y_lock)
         # self._x_moving = multiprocessing.Value('b', False, lock=False)
@@ -69,9 +102,11 @@ class SketchController(object):
         print(delta_log)
 
     def _move_x(self, v_x, t):
-        self.heartbeat.heartbeat_sync()
+        # self.heartbeat.heartbeat_sync()
+        self.buddysync.buddy_up()
         move_ts = datetime.datetime.now()
         self.x_move_ts = move_ts
+
         print("starting _move_x {}\n".format(move_ts))
         sleep(t)
         print("done _move_x {}\n".format(datetime.datetime.now()))
@@ -87,7 +122,8 @@ class SketchController(object):
             self.x += delta_x
 
     def _move_y(self, v_y, t):
-        self.heartbeat.heartbeat_sync()
+        # self.heartbeat.heartbeat_sync()
+        self.buddysync.buddy_up()
         move_ts = datetime.datetime.now()
         self.y_move_ts = move_ts
         print("starting _move_y {}\n".format(move_ts))
