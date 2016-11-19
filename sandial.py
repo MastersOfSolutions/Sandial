@@ -6,6 +6,7 @@ import datetime
 import codecs
 from collections import deque
 import math
+from io import StringIO
 
 __author__ = 'ethan'
 
@@ -77,9 +78,17 @@ class SketchController(object):
         self.buddysync = BuddySync()
         self.x_move_ts = None
         self.y_move_ts = None
+        self.svg_file = StringIO()
+        self.svg_file.write("""<svg width="100%" height="100%" viewBox="0 0 700 700"
+     xmlns="http://www.w3.org/2000/svg">\n
+     <path stroke=\"black\" stroke-width=\"3\" d=\"M 50 50""")
 
     def shake_to_clear(self):
-        raise NotImplementedError
+        self.svg_file.seek(0)
+        self.svg_file.truncate()
+        self.svg_file.write("""<svg width="100%" height="100%" viewBox="0 0 700 700"
+     xmlns="http://www.w3.org/2000/svg">\n
+     <path fill=\"transparent\" stroke=\"black\" stroke-width=\"3\" d=\"M 50 50""")
 
     def return_to_origin(self):
         raise NotImplementedError
@@ -99,10 +108,10 @@ class SketchController(object):
         move_ts = datetime.datetime.now()
         self.x_move_ts = move_ts
 
+        # # print("starting _move_x {}\n".format(move_ts))
         # print("starting _move_x {}\n".format(move_ts))
-        print("starting _move_x {}\n".format(move_ts))
         sleep(t)
-        print("done _move_x {}\n".format(datetime.datetime.now()))
+        # print("done _move_x {}\n".format(datetime.datetime.now()))
         if self.x_move_ts and self.y_move_ts:
             self.print_move_deltas()
         calc_delta_x = v_x * t
@@ -121,9 +130,9 @@ class SketchController(object):
         self.buddysync.buddy_up()
         move_ts = datetime.datetime.now()
         self.y_move_ts = move_ts
-        print("starting _move_y {}\n".format(move_ts))
+        # print("starting _move_y {}\n".format(move_ts))
         sleep(t)
-        print("done _move_y {}\n".format(datetime.datetime.now()))
+        # print("done _move_y {}\n".format(datetime.datetime.now()))
         if self.x_move_ts and self.y_move_ts:
             self.print_move_deltas()
         calc_delta_y = v_y * t
@@ -137,7 +146,7 @@ class SketchController(object):
             self._move_y(calc_vy, delta_t)
             self.y += delta_y
 
-    def move_x_and_y(self, delta_x, delta_y, delta_t=0.2):
+    def move_x_and_y(self, delta_x, delta_y, delta_t=0.02):
         calc_vx = float(delta_x) / float(delta_t)
         calc_vy = float(delta_y) / float(delta_t)
         old_x, old_y = self.x, self.y
@@ -157,6 +166,7 @@ class SketchController(object):
                 self.threads.append(t2)
 
         self.wait_in_line()
+        self.svg_file.write(""" l {} {}""".format(delta_x, delta_y))
         print("({},{}) --> ({},{})\n".format(old_x, old_y, self.x, self.y))
 
     def wait_in_line(self):
@@ -168,6 +178,11 @@ class SketchController(object):
     @property
     def position(self):
         return self.x, self.y
+
+    def export_svg(self):
+        self.svg_file.write("\"/></svg>\n")
+        result = self.svg_file.getvalue()
+        return self.svg_file.getvalue()
 
 
 def join_threads(threads):
@@ -198,7 +213,7 @@ class ClockSketch(object):
         delta_x_orig = self.origin_x - self.sc.x
         delta_y_orig = self.origin_y - self.sc.y
         self.sc.move_x_and_y(delta_x_orig, delta_y_orig)
-        # TODO: self.sc.shake_to_clear()
+        self.sc.shake_to_clear()
 
     def paint_clockface(self):
         self.sc.move_x_and_y(self.mid_x, 0.0)
@@ -249,16 +264,12 @@ class ClockSketch(object):
         else:
             raise Exception("HEY! ({},{}) is not on the perimeter!".format(x_pos, y_pos))
 
-    def draw_hands(self):
+    def draw_hands(self, t_hours=3.0, t_minutes=0.1):
         clock_inner_r = self.mid_x
-        t_hours = 3.0
-        t_minutes = 0.1
         minute_sector = t_minutes // 15.0
         # local_minute_angle = (local_minute_angle / 15.0) * 90.0
         local_minute_angle = (t_minutes % 15.0) * 6.0
         minute_perimeter_slice = clock_inner_r * math.tan(math.radians(local_minute_angle))
-        # minute_perimeter_x1 = clock_inner_r * (2.0 - math.floor(minute_sector / 2.0))
-        # minute_perimeter_y1 = clock_inner_r * (2.0 - math.floor(abs(minute_sector - 1.0) / 2.0))
 
         hour_sector = (t_hours + (t_minutes / 60.0)) // 3.0
         # local_hour_angle = (((t_hours + (t_minutes / 60.0)) % 3.0) / 3.0) * 90.0
@@ -270,37 +281,51 @@ class ClockSketch(object):
         hour_inner_slice_opp = hour_inner_radius * math.sin(local_hour_angle_rad)
         hour_inner_slice_adj = hour_inner_radius * math.cos(local_hour_angle_rad)
 
-        # hour_perimeter_x1 = clock_inner_r * (2.0 - math.floor(hour_sector / 2.0))
-        # hour_perimeter_y1 = clock_inner_r * (2.0 - math.floor(abs(hour_sector - 1.0) / 2.0))
-
         if minute_sector == 0.0:  # 0 <= m < 15
             minute_perimeter_x1 = self.mid_x
             minute_perimeter_y1 = 0.0
-            minute_perimeter_x2 = minute_perimeter_slice % self.mid_x
-            minute_perimeter_y2 = minute_perimeter_slice - minute_perimeter_x2
+            if local_minute_angle < 45.0:
+                minute_perimeter_x2 = minute_perimeter_slice % self.mid_x
+                minute_perimeter_y2 = minute_perimeter_slice - minute_perimeter_slice % self.mid_x
+            else:
+                minute_perimeter_y2 = minute_perimeter_slice % self.mid_x
+                minute_perimeter_x2 = minute_perimeter_slice - minute_perimeter_slice % self.mid_x
 
         elif minute_sector == 1.0:  # 15 <= m < 30
             minute_perimeter_x1 = self.width
             minute_perimeter_y1 = self.mid_y
             minute_perimeter_y2 = minute_perimeter_slice % self.mid_x
             minute_perimeter_x2 = -(minute_perimeter_slice - minute_perimeter_y2)
+            if local_minute_angle > 45.0:
+                minute_perimeter_x2, minute_perimeter_y2 = -minute_perimeter_y2, -minute_perimeter_x2
 
         elif minute_sector == 2.0:  # 30 <= m < 45
             minute_perimeter_x1 = self.mid_x
             minute_perimeter_y1 = self.width
-            minute_perimeter_y2 = -(minute_perimeter_slice % self.mid_x)
-            minute_perimeter_x2 = -(minute_perimeter_slice + minute_perimeter_y2)
+
+            if local_minute_angle < 45.0:
+                minute_perimeter_x2 = -(minute_perimeter_slice % self.mid_x)
+                minute_perimeter_y2 = -(minute_perimeter_slice + minute_perimeter_x2)
+
+            else:
+                minute_perimeter_y2 = -(minute_perimeter_slice % self.mid_x)
+                minute_perimeter_x2 = -(minute_perimeter_slice + minute_perimeter_y2)
 
         else:  # 45 <= m < 60
             minute_perimeter_x1 = 0.0
             minute_perimeter_y1 = self.mid_y
-            minute_perimeter_y2 = -(minute_perimeter_slice % self.mid_x)
-            minute_perimeter_x2 = minute_perimeter_slice + minute_perimeter_y2
+
+            if local_minute_angle < 45.0:
+                minute_perimeter_y2 = -(minute_perimeter_slice % self.mid_x)
+                minute_perimeter_x2 = minute_perimeter_slice + minute_perimeter_y2
+            else:
+                minute_perimeter_x2 = self.mid_x - (minute_perimeter_slice % self.mid_x)
+                minute_perimeter_y2 = -self.mid_y
 
         minute_perimeter_xf = minute_perimeter_x1 + minute_perimeter_x2
         minute_perimeter_yf = minute_perimeter_y1 + minute_perimeter_y2
 
-        if hour_sector == 0.0:  # 0 <= m < 3
+        if hour_sector == 0.0 or t_hours == 0.0:  # 0 <= m < 3
             hour_inner_xf = hour_inner_slice_opp
             hour_inner_yf = -hour_inner_slice_adj
 
@@ -316,6 +341,8 @@ class ClockSketch(object):
             hour_inner_xf = -hour_inner_slice_adj
             hour_inner_yf = -hour_inner_slice_opp
 
+        print("t_minutes: {}".format(t_minutes))
+        print("t_hours: {}".format(t_hours))
         print("minute_sector: {}".format(minute_sector))
         print("local_minute_angle: {}".format(local_minute_angle))
         print("minute_perimeter_slice: {}".format(minute_perimeter_slice))
@@ -339,13 +366,11 @@ class ClockSketch(object):
         self.sc.move_x_and_y(x_to_center, y_to_center)
         self.sc.move_x_and_y(hour_inner_xf, hour_inner_yf)
 
-        # TODO: Implement hours
-        pass
-
-    def refresh_clock(self):
+    def refresh_clock(self, t_hours=3.0, t_minutes=0.1):
         self.reset()
         self.paint_clockface()
-        self.draw_hands()
+        self.draw_hands(t_hours=t_hours, t_minutes=t_minutes)
+        return self.sc.export_svg()
 
 
 def main():
@@ -353,6 +378,13 @@ def main():
     try:
         sc = SketchController()
         cs = ClockSketch(sc)
+        for h1 in xrange(0, 2):
+            h1 = float(h1)
+            for m1 in xrange(0, 60, 5):
+                m1 = float(m1)
+                svg1 = cs.refresh_clock(h1, m1)
+                with open("clocks/clock_{}:{}.svg".format(h1, m1), "w") as fd1:
+                    fd1.write(str(svg1))
         # sc.move_x_and_y(5.3, 7.9, 0.1)
         # sc.move_x_and_y(2.1, 3.2, 0.2)
     except KeyboardInterrupt:
