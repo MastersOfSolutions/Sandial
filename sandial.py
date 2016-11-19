@@ -251,25 +251,33 @@ class ClockSketch(object):
 
     def draw_hands(self):
         clock_inner_r = self.mid_x
-        t_hours = 4.0
-        t_minutes = 45.0
-        minute_sector, local_minute_angle = divmod(t_minutes, 15.0)
-        local_minute_angle = (local_minute_angle / 15.0) * 90.0
+        t_hours = 3.0
+        t_minutes = 0.1
+        minute_sector = t_minutes // 15.0
+        # local_minute_angle = (local_minute_angle / 15.0) * 90.0
+        local_minute_angle = (t_minutes % 15.0) * 6.0
         minute_perimeter_slice = clock_inner_r * math.tan(math.radians(local_minute_angle))
         # minute_perimeter_x1 = clock_inner_r * (2.0 - math.floor(minute_sector / 2.0))
         # minute_perimeter_y1 = clock_inner_r * (2.0 - math.floor(abs(minute_sector - 1.0) / 2.0))
 
-        hour_sector = t_hours // 3.0
-        local_hour_angle = (((t_hours + (t_minutes / 60.0)) % 3.0) / 3.0) * 90.0
-        hour_perimeter_slice = clock_inner_r * math.tan(math.radians(90.0 - local_hour_angle))
-        hour_perimeter_x1 = clock_inner_r * (2.0 - math.floor(hour_sector / 2.0))
-        hour_perimeter_y1 = clock_inner_r * (2.0 - math.floor(abs(hour_sector - 1.0) / 2.0))
+        hour_sector = (t_hours + (t_minutes / 60.0)) // 3.0
+        # local_hour_angle = (((t_hours + (t_minutes / 60.0)) % 3.0) / 3.0) * 90.0
+        local_hour_angle = ((t_hours + (t_minutes / 60.0)) % 3.0) * 30.0
+        local_hour_angle_rad = math.radians(local_hour_angle)
+
+        hour_perimeter_slice = clock_inner_r * math.tan(math.radians(local_hour_angle))
+        hour_inner_radius = self.mid_x / 2.0
+        hour_inner_slice_opp = hour_inner_radius * math.sin(local_hour_angle_rad)
+        hour_inner_slice_adj = hour_inner_radius * math.cos(local_hour_angle_rad)
+
+        # hour_perimeter_x1 = clock_inner_r * (2.0 - math.floor(hour_sector / 2.0))
+        # hour_perimeter_y1 = clock_inner_r * (2.0 - math.floor(abs(hour_sector - 1.0) / 2.0))
 
         if minute_sector == 0.0:  # 0 <= m < 15
             minute_perimeter_x1 = self.mid_x
             minute_perimeter_y1 = 0.0
-            minute_perimeter_y2 = minute_perimeter_slice % self.mid_x
-            minute_perimeter_x2 = minute_perimeter_slice - minute_perimeter_y2
+            minute_perimeter_x2 = minute_perimeter_slice % self.mid_x
+            minute_perimeter_y2 = minute_perimeter_slice - minute_perimeter_x2
 
         elif minute_sector == 1.0:  # 15 <= m < 30
             minute_perimeter_x1 = self.width
@@ -292,18 +300,36 @@ class ClockSketch(object):
         minute_perimeter_xf = minute_perimeter_x1 + minute_perimeter_x2
         minute_perimeter_yf = minute_perimeter_y1 + minute_perimeter_y2
 
+        if hour_sector == 0.0:  # 0 <= m < 3
+            hour_inner_xf = hour_inner_slice_opp
+            hour_inner_yf = -hour_inner_slice_adj
 
+        elif hour_sector == 1.0:  # 3 <= m < 6
+            hour_inner_xf = hour_inner_slice_adj
+            hour_inner_yf = hour_inner_slice_opp
+
+        elif hour_sector == 2.0:  # 6 <= m < 9
+            hour_inner_xf = -hour_inner_slice_opp
+            hour_inner_yf = -hour_inner_slice_adj
+
+        else:  # 9 <= m < 12
+            hour_inner_xf = -hour_inner_slice_adj
+            hour_inner_yf = -hour_inner_slice_opp
 
         print("minute_sector: {}".format(minute_sector))
         print("local_minute_angle: {}".format(local_minute_angle))
         print("minute_perimeter_slice: {}".format(minute_perimeter_slice))
         print("minute_perimeter_x1: {}".format(minute_perimeter_x1))
         print("minute_perimeter_y1: {}".format(minute_perimeter_y1))
+        print("minute_perimeter_x2: {}".format(minute_perimeter_x2))
+        print("minute_perimeter_y2: {}".format(minute_perimeter_y2))
+        print("minute_perimeter_xf: {}".format(minute_perimeter_xf))
+        print("minute_perimeter_yf: {}".format(minute_perimeter_yf))
         print("hour_sector: {}".format(hour_sector))
         print("local_hour_angle: {}".format(local_hour_angle))
         print("hour_perimeter_slice: {}".format(hour_perimeter_slice))
-        print("hour_perimeter_x1: {}".format(hour_perimeter_x1))
-        print("hour_perimeter_y1: {}".format(hour_perimeter_y1))
+        print("hour_inner_xf: {}".format(hour_inner_xf))
+        print("hour_inner_yf: {}".format(hour_inner_yf))
 
         self.walk_perimeter_to(minute_perimeter_xf, minute_perimeter_yf)
 
@@ -311,6 +337,7 @@ class ClockSketch(object):
         y_to_center = self.mid_y - self.sc.y
 
         self.sc.move_x_and_y(x_to_center, y_to_center)
+        self.sc.move_x_and_y(hour_inner_xf, hour_inner_yf)
 
         # TODO: Implement hours
         pass
