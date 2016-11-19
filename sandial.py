@@ -1,10 +1,13 @@
-# coding: utf-8
+# -*- coding: utf-8 -*-
 from __future__ import unicode_literals, print_function
 import threading
 from time import sleep
 import datetime
+import codecs
 
 __author__ = 'ethan'
+
+codecs.register(codecs.lookup)  # Fix LookupError thread race condition
 
 
 class MovingLockoutError(IOError):
@@ -37,12 +40,11 @@ class HeartbeatSync(object):
 
 
 class BuddySync(object):
-    def __init__(self, req_buddies=2):
+    def __init__(self, req_buddies=2, default_timeout=5):
         self.req_buddies = req_buddies
+        self.default_timeout = default_timeout
         self.cur_buddies = 0
         self.evt_go = threading.Event()
-        self.dummy_evt_go = threading.Event()
-        self.dummy_cur_buddies = 0
 
     def buddy_up(self):
         if self.cur_buddies == (self.req_buddies - 1):
@@ -57,15 +59,7 @@ class BuddySync(object):
         self.evt_go.clear()
 
     def _wait_for_buddy(self):
-        self.evt_go.wait(5)
-        # self.dummy_evt_go.set()
-        # self.dummy_cur_buddies = 0
-        # self.dummy_evt_go.clear()
-
-    def wait_for_buddy2(self):
-        while not self.evt_go.is_set:
-            if self.cur_buddies == self.req_buddies:
-                self._flush_buddies()
+        self.evt_go.wait(self.default_timeout)
 
 
 class SketchController(object):
@@ -79,10 +73,6 @@ class SketchController(object):
         self.y = 0.0
         self.heartbeat = HeartbeatSync()
         self.buddysync = BuddySync()
-        #self.x = threading.Value('d', 0.0, lock=self._x_lock)
-        #self.y = multiprocessing.Value('d', 0.0, lock=self._y_lock)
-        # self._x_moving = multiprocessing.Value('b', False, lock=False)
-        # self._y_moving = multiprocessing.Value('b', False, lock=False)
         self.x_move_ts = None
         self.y_move_ts = None
 
@@ -107,6 +97,7 @@ class SketchController(object):
         move_ts = datetime.datetime.now()
         self.x_move_ts = move_ts
 
+        # print("starting _move_x {}\n".format(move_ts))
         print("starting _move_x {}\n".format(move_ts))
         sleep(t)
         print("done _move_x {}\n".format(datetime.datetime.now()))
@@ -180,14 +171,16 @@ class ClockSketch(object):
 
 
 def main():
-    sc = SketchController()
-    sc.move_x_and_y(5.3, 7.9, 0.7)
+
     try:
+        sc = SketchController()
+        sc.move_x_and_y(5.3, 7.9, 0.1)
         join_threads(sc.threads)
     except KeyboardInterrupt:
         print("\nKeyboardInterrupt catched.")
         print("Terminate main thread.")
         print("If only daemonic threads are left, terminate whole program.")
+        exit(1)
 
 if __name__ == '__main__':
     main()
