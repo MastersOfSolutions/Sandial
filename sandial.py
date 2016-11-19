@@ -4,6 +4,7 @@ import threading
 from time import sleep
 import datetime
 import codecs
+from collections import deque
 
 __author__ = 'ethan'
 
@@ -66,7 +67,7 @@ class SketchController(object):
     DEFAULT_V = 3
 
     def __init__(self):
-        self.threads = []
+        self.threads = deque()
         self._x_lock = threading.Lock()
         self._y_lock = threading.Lock()
         self.x = 0.0
@@ -103,6 +104,8 @@ class SketchController(object):
         print("done _move_x {}\n".format(datetime.datetime.now()))
         if self.x_move_ts and self.y_move_ts:
             self.print_move_deltas()
+        calc_delta_x = v_x * t
+        self.x += calc_delta_x
         # TODO: implement the motion
 
     def move_x(self, delta_x, delta_t=0.5):
@@ -122,6 +125,8 @@ class SketchController(object):
         print("done _move_y {}\n".format(datetime.datetime.now()))
         if self.x_move_ts and self.y_move_ts:
             self.print_move_deltas()
+        calc_delta_y = v_y * t
+        self.y += calc_delta_y
         # TODO: implement the motion
 
     def move_y(self, delta_y, delta_t=0.5):
@@ -134,6 +139,7 @@ class SketchController(object):
     def move_x_and_y(self, delta_x, delta_y, delta_t=0.5):
         calc_vx = float(delta_x) / float(delta_t)
         calc_vy = float(delta_y) / float(delta_t)
+        old_x, old_y = self.x, self.y
 
         with self._x_lock:
             with self._y_lock:
@@ -148,6 +154,15 @@ class SketchController(object):
                 t2.start()
                 self.threads.append(t1)
                 self.threads.append(t2)
+
+        self.wait_in_line()
+        print("({},{}) --> ({},{})\n".format(old_x, old_y, self.x, self.y))
+
+    def wait_in_line(self):
+        for t in self.threads:
+            while t.isAlive():
+                t.join(5)
+        self.threads.clear()
 
     @property
     def position(self):
@@ -165,17 +180,92 @@ def join_threads(threads):
 
 
 class ClockSketch(object):
-    def __init__(self):
-        self.width = 600
-        self.height = 600
+    def __init__(self, sketch_controller):
+        self.origin_x = 0.0
+        self.origin_y = 0.0
+        self.width = 600.0
+        self.height = 600.0
+        self.tick_len = 20.0
+        self.mid_x = (self.width / 2.0) + self.origin_x
+        self.mid_y = (self.height / 2.0) + self.origin_y
+        assert isinstance(sketch_controller, SketchController)
+        self.sc = sketch_controller
+        assert isinstance(self.sc, SketchController)
+        self.reset()
+        self.paint_clockface()
+
+    def reset(self):
+        delta_x_orig = self.origin_x - self.sc.x
+        delta_y_orig = self.origin_y - self.sc.y
+        self.sc.move_x_and_y(delta_x_orig, delta_y_orig)
+        # TODO: self.sc.shake_to_clear()
+
+    def paint_clockface(self):
+        self.sc.move_x_and_y(self.mid_x, 0.0)
+        self.sc.move_x_and_y(0.0, self.tick_len)
+        self.sc.move_x_and_y(0.0, -self.tick_len)
+        self.sc.move_x_and_y(self.mid_x, 0.0)
+        self.sc.move_x_and_y(0.0, self.mid_y)
+        self.sc.move_x_and_y(-self.tick_len, 0.0)
+        self.sc.move_x_and_y(self.tick_len, 0.0)
+        self.sc.move_x_and_y(0.0, self.mid_y)
+        self.sc.move_x_and_y(-self.mid_x, 0.0)
+        self.sc.move_x_and_y(0.0, -self.tick_len)
+        self.sc.move_x_and_y(0.0, self.tick_len)
+        self.sc.move_x_and_y(-self.mid_x, 0.0)
+        self.sc.move_x_and_y(0.0, -self.mid_y)
+        self.sc.move_x_and_y(self.tick_len, 0.0)
+        self.sc.move_x_and_y(-self.tick_len, 0.0)
+        self.sc.move_x_and_y(0.0, -self.mid_y)
+
+    def walk_perimeter_to(self, x_pos, y_pos):
+        # assume starting at origin
+
+        if y_pos == 0.0:  # on the top face
+            self.sc.move_x_and_y(x_pos, 0.0)
+            return 0
+
+        else:  # skip to right face
+            self.sc.move_x_and_y(self.width, 0.0)
+
+        if x_pos == self.width:  # on the right face
+            self.sc.move_x_and_y(0.0, y_pos)
+            return 1
+
+        else:  # skip to the bottom face
+            self.sc.move_x_and_y(0.0, self.height)
+
+        if y_pos == self.height:  # on the bottom face
+            self.sc.move_x_and_y(x_pos - self.width, 0.0)
+            return 2
+
+        else:  # skip to the left face
+            self.sc.move_x_and_y(-self.width, 0.0)
+
+        if x_pos == 0.0:  # on the left face
+            self.sc.move_x_and_y(0.0, y_pos - self.height)
+            return 3
+
+        else:
+            raise Exception("HEY! ({},{}) is not on the perimeter!".format(x_pos, y_pos))
+
+    def draw_hands(self):
+        # TODO: Implement this
+        pass
+
+    def refresh_clock(self):
+        self.reset()
+        self.paint_clockface()
+        self.draw_hands()
 
 
 def main():
 
     try:
         sc = SketchController()
-        sc.move_x_and_y(5.3, 7.9, 0.1)
-        join_threads(sc.threads)
+        cs = ClockSketch(sc)
+        # sc.move_x_and_y(5.3, 7.9, 0.1)
+        # sc.move_x_and_y(2.1, 3.2, 0.2)
     except KeyboardInterrupt:
         print("\nKeyboardInterrupt catched.")
         print("Terminate main thread.")
