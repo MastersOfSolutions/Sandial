@@ -5,6 +5,7 @@ from time import sleep
 import datetime
 import codecs
 from collections import deque
+import math
 
 __author__ = 'ethan'
 
@@ -136,7 +137,7 @@ class SketchController(object):
             self._move_y(calc_vy, delta_t)
             self.y += delta_y
 
-    def move_x_and_y(self, delta_x, delta_y, delta_t=0.5):
+    def move_x_and_y(self, delta_x, delta_y, delta_t=0.2):
         calc_vx = float(delta_x) / float(delta_t)
         calc_vy = float(delta_y) / float(delta_t)
         old_x, old_y = self.x, self.y
@@ -191,8 +192,7 @@ class ClockSketch(object):
         assert isinstance(sketch_controller, SketchController)
         self.sc = sketch_controller
         assert isinstance(self.sc, SketchController)
-        self.reset()
-        self.paint_clockface()
+        self.refresh_clock()
 
     def reset(self):
         delta_x_orig = self.origin_x - self.sc.x
@@ -250,7 +250,53 @@ class ClockSketch(object):
             raise Exception("HEY! ({},{}) is not on the perimeter!".format(x_pos, y_pos))
 
     def draw_hands(self):
-        # TODO: Implement this
+        clock_inner_r = self.mid_x
+        t_hours = 1.0
+        t_minutes = 37.6
+        minute_sector, local_minute_angle = divmod(t_minutes, 15.0)
+        local_minute_angle = (local_minute_angle / 15.0) * 90.0
+        minute_perimeter_slice = clock_inner_r * math.tan(math.radians(local_minute_angle))
+        minute_perimeter_x1 = clock_inner_r * (2.0 - math.floor(minute_sector / 2.0))
+        minute_perimeter_y1 = clock_inner_r * (2.0 - math.floor(abs(minute_sector - 1.0) / 2.0))
+
+        local_hour_angle = ((t_hours + (t_minutes / 60.0)) % 3.0) / 3.0 * 90.0
+        hour_perimeter_slice = clock_inner_r * math.tan(math.radians(90.0 - local_hour_angle))
+
+        if minute_sector == 0.0:  # 0 <= m < 15
+            minute_perimeter_y2 = minute_perimeter_slice % self.mid_x
+            minute_perimeter_x2 = minute_perimeter_slice - minute_perimeter_y2
+
+        elif minute_sector == 1.0:  # 15 <= m < 30
+            minute_perimeter_y2 = minute_perimeter_slice % self.mid_x
+            minute_perimeter_x2 = -(minute_perimeter_slice - minute_perimeter_y2)
+
+        elif minute_sector == 2.0:  # 30 <= m < 45
+            minute_perimeter_y2 = -(minute_perimeter_slice % self.mid_x)
+            minute_perimeter_x2 = -(minute_perimeter_slice + minute_perimeter_y2)
+
+        else:  # 45 <= m < 60
+            minute_perimeter_y2 = -(minute_perimeter_slice % self.mid_x)
+            minute_perimeter_x2 = minute_perimeter_slice + minute_perimeter_y2
+
+        minute_perimeter_xf = minute_perimeter_x1 + minute_perimeter_x2
+        minute_perimeter_yf = minute_perimeter_y1 + minute_perimeter_y2
+
+        self.walk_perimeter_to(minute_perimeter_xf, minute_perimeter_yf)
+
+        x_to_center = self.mid_x - self.sc.x
+        y_to_center = self.mid_y - self.sc.y
+
+        self.sc.move_x_and_y(x_to_center, y_to_center)
+
+        print("minute_sector: {}".format(minute_sector))
+        print("local_minute_angle: {}".format(local_minute_angle))
+        print("minute_perimeter_slice: {}".format(minute_perimeter_slice))
+        print("minute_perimeter_x1: {}".format(minute_perimeter_x1))
+        print("minute_perimeter_y1: {}".format(minute_perimeter_y1))
+        print("local_hour_angle: {}".format(local_hour_angle))
+        print("hour_perimeter_slice: {}".format(hour_perimeter_slice))
+
+        # TODO: Implement hours
         pass
 
     def refresh_clock(self):
