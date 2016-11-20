@@ -266,14 +266,39 @@ class ClockSketch(object):
 
     def draw_hands(self, t_hours=3.0, t_minutes=0.1):
         clock_inner_r = self.mid_x
+        t_am_pm, t_hours_float = divmod(t_hours + (t_minutes / 60.0), 12.0)
+
         minute_sector = t_minutes // 15.0
         # local_minute_angle = (local_minute_angle / 15.0) * 90.0
         local_minute_angle = (t_minutes % 15.0) * 6.0
-        minute_perimeter_slice = clock_inner_r * math.tan(math.radians(local_minute_angle))
+        local_minute_angle_rad = math.radians(local_minute_angle)
+        minute_perimeter_slice = clock_inner_r * math.tan(local_minute_angle_rad)
+        minute_inner_adj = self.mid_x
 
-        hour_sector = (t_hours + (t_minutes / 60.0)) // 3.0
+        if local_minute_angle == 0.0:
+            minute_inner_opp1 = 0.0
+            minute_inner_opp2 = 0.0
+        elif local_minute_angle == 45.0:
+            minute_inner_opp1 = self.mid_x
+            minute_inner_opp2 = 0.0
+
+        elif local_minute_angle == 90.0:
+            minute_inner_opp1 = self.mid_x
+            minute_inner_opp2 = self.mid_x
+
+        elif 0.0 < local_minute_angle < 45.0:
+            minute_inner_opp1 = self.mid_x * math.tan(local_minute_angle_rad)
+            minute_inner_opp2 = 0.0
+
+        elif 45.0 < local_minute_angle < 90.0:
+            minute_inner_opp1 = self.mid_x
+            minute_inner_opp2 = self.mid_x * math.tan(math.radians(local_minute_angle % 45.0))
+        else:
+            raise Exception("HEY! {}degrees is not a valid local minute angle!".format(local_minute_angle))
+
+        hour_sector = t_hours_float // 3.0
         # local_hour_angle = (((t_hours + (t_minutes / 60.0)) % 3.0) / 3.0) * 90.0
-        local_hour_angle = ((t_hours + (t_minutes / 60.0)) % 3.0) * 30.0
+        local_hour_angle = (t_hours_float % 3.0) * 30.0
         local_hour_angle_rad = math.radians(local_hour_angle)
 
         hour_perimeter_slice = clock_inner_r * math.tan(math.radians(local_hour_angle))
@@ -284,43 +309,26 @@ class ClockSketch(object):
         if minute_sector == 0.0:  # 0 <= m < 15
             minute_perimeter_x1 = self.mid_x
             minute_perimeter_y1 = 0.0
-            if local_minute_angle < 45.0:
-                minute_perimeter_x2 = minute_perimeter_slice % self.mid_x
-                minute_perimeter_y2 = minute_perimeter_slice - minute_perimeter_slice % self.mid_x
-            else:
-                minute_perimeter_y2 = minute_perimeter_slice % self.mid_x
-                minute_perimeter_x2 = minute_perimeter_slice - minute_perimeter_slice % self.mid_x
+            minute_perimeter_x2 = minute_inner_opp1
+            minute_perimeter_y2 = minute_inner_opp2
 
         elif minute_sector == 1.0:  # 15 <= m < 30
             minute_perimeter_x1 = self.width
             minute_perimeter_y1 = self.mid_y
-            minute_perimeter_y2 = minute_perimeter_slice % self.mid_x
-            minute_perimeter_x2 = -(minute_perimeter_slice - minute_perimeter_y2)
-            if local_minute_angle > 45.0:
-                minute_perimeter_x2, minute_perimeter_y2 = -minute_perimeter_y2, -minute_perimeter_x2
+            minute_perimeter_x2 = -minute_inner_opp2
+            minute_perimeter_y2 = minute_inner_opp1
 
         elif minute_sector == 2.0:  # 30 <= m < 45
             minute_perimeter_x1 = self.mid_x
             minute_perimeter_y1 = self.width
-
-            if local_minute_angle < 45.0:
-                minute_perimeter_x2 = -(minute_perimeter_slice % self.mid_x)
-                minute_perimeter_y2 = -(minute_perimeter_slice + minute_perimeter_x2)
-
-            else:
-                minute_perimeter_y2 = -(minute_perimeter_slice % self.mid_x)
-                minute_perimeter_x2 = -(minute_perimeter_slice + minute_perimeter_y2)
+            minute_perimeter_x2 = -minute_inner_opp1
+            minute_perimeter_y2 = -minute_inner_opp2
 
         else:  # 45 <= m < 60
             minute_perimeter_x1 = 0.0
             minute_perimeter_y1 = self.mid_y
-
-            if local_minute_angle < 45.0:
-                minute_perimeter_y2 = -(minute_perimeter_slice % self.mid_x)
-                minute_perimeter_x2 = minute_perimeter_slice + minute_perimeter_y2
-            else:
-                minute_perimeter_x2 = self.mid_x - (minute_perimeter_slice % self.mid_x)
-                minute_perimeter_y2 = -self.mid_y
+            minute_perimeter_x2 = minute_inner_opp2
+            minute_perimeter_y2 = -minute_inner_opp1
 
         minute_perimeter_xf = minute_perimeter_x1 + minute_perimeter_x2
         minute_perimeter_yf = minute_perimeter_y1 + minute_perimeter_y2
@@ -364,7 +372,19 @@ class ClockSketch(object):
         y_to_center = self.mid_y - self.sc.y
 
         self.sc.move_x_and_y(x_to_center, y_to_center)
+        self.draw_am_or_pm(t_am_or_pm=t_am_pm)
         self.sc.move_x_and_y(hour_inner_xf, hour_inner_yf)
+
+    def draw_am_or_pm(self, t_am_or_pm):
+        assert t_am_or_pm in (0, 1)
+        up_or_down = -1.0 if t_am_or_pm == 0 else 1.0
+
+        self.sc.move_x_and_y(-self.tick_len, 0.0)
+        self.sc.move_x_and_y(0.0, up_or_down * self.tick_len)
+        self.sc.move_x_and_y(self.tick_len * 2.0, 0.0)
+        self.sc.move_x_and_y(0.0, up_or_down * -self.tick_len)
+        self.sc.move_x_and_y(-self.tick_len, 0.0)
+
 
     def refresh_clock(self, t_hours=3.0, t_minutes=0.1):
         self.reset()
@@ -378,12 +398,12 @@ def main():
     try:
         sc = SketchController()
         cs = ClockSketch(sc)
-        for h1 in xrange(0, 2):
+        for h1 in xrange(11, 14):
             h1 = float(h1)
-            for m1 in xrange(0, 60, 5):
+            for m1 in xrange(0, 60, 20):
                 m1 = float(m1)
                 svg1 = cs.refresh_clock(h1, m1)
-                with open("clocks/clock_{}:{}.svg".format(h1, m1), "w") as fd1:
+                with open("clocks/clock_{}_{}.svg".format(h1, m1), "w") as fd1:
                     fd1.write(str(svg1))
         # sc.move_x_and_y(5.3, 7.9, 0.1)
         # sc.move_x_and_y(2.1, 3.2, 0.2)
