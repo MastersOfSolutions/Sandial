@@ -103,15 +103,11 @@ class SketchController(object):
         print(delta_log)
 
     def _move_x(self, v_x, t):
-        # self.heartbeat.heartbeat_sync()
         self.buddysync.buddy_up()
         move_ts = datetime.datetime.now()
         self.x_move_ts = move_ts
 
-        # # print("starting _move_x {}\n".format(move_ts))
-        # print("starting _move_x {}\n".format(move_ts))
         sleep(t)
-        # print("done _move_x {}\n".format(datetime.datetime.now()))
         if self.x_move_ts and self.y_move_ts:
             self.print_move_deltas()
         calc_delta_x = v_x * t
@@ -199,11 +195,9 @@ class ClockSketch(object):
     def __init__(self, sketch_controller):
         self.origin_x = 0.0
         self.origin_y = 0.0
-        self.width = 600.0
-        self.height = 600.0
-        self.tick_len = 20.0
-        self.mid_x = (self.width / 2.0) + self.origin_x
-        self.mid_y = (self.height / 2.0) + self.origin_y
+        self.height = self.width = 600.0
+        self.tick_len = 40.0
+        self.mid_y = self.mid_x = self.width / 2.0
         assert isinstance(sketch_controller, SketchController)
         self.sc = sketch_controller
         assert isinstance(self.sc, SketchController)
@@ -384,7 +378,6 @@ class ClockSketch(object):
         self.sc.move_x_and_y(self.tick_len * 2.0, 0.0)
         self.sc.move_x_and_y(0.0, up_or_down * -self.tick_len)
         self.sc.move_x_and_y(-self.tick_len, 0.0)
-
 
     def refresh_clock(self, t_hours=3.0, t_minutes=0.1):
         self.reset()
