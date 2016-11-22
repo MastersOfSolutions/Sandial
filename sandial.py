@@ -65,6 +65,29 @@ class BuddySync(object):
         self.evt_go.wait(self.default_timeout)
 
 
+class PiMotor(object):
+    def __init__(self, gpio=None, pin_a=None, pin_b=None, pin_c=None):
+        self.gpio = gpio
+
+    def register(self, io_controller, *pins):
+        raise NotImplementedError
+
+    def clockwise(self):
+        raise NotImplementedError
+
+    def counter_clockwise(self):
+        raise NotImplementedError
+
+    def start(self):
+        raise NotImplementedError
+
+    def stop(self):
+        raise NotImplementedError
+
+    def cleanup(self):
+        raise NotImplementedError
+
+
 class SketchController(object):
     DEFAULT_V = 3
 
