@@ -196,15 +196,9 @@ class SketchController(object):
             self.svg_file.write("<path id=\"p1\" stroke=\"black\" stroke-width=\"3\" fill=\"transparent\" d=\"")
             self.svg_file.write(self.path_d_val_buffer.getvalue())
             self.svg_file.write("\">\n<animate attributeName=\"d\" attributeType=\"XML\" dur=\"10s\" "
-                                "repeatCount=\"indefinite\"\nvalues=\"")
+                                "repeatCount=\"0\"\nvalues=\"")
             self.svg_file.write(self.anim_d_val_buffer.getvalue())
             #  self.svg_file.write("\"/>\n<use href=\"#anim1\"/></path>\n")
-            self.svg_file.write("\"/>\n</path>\n")
-
-            self.svg_file.write("<path id=\"p2\" stroke=\"black\" stroke-width=\"8\" fill=\"transparent\" d=\"M0 0\">\n")
-            self.svg_file.write("<animate attributeName=\"d\" attributeType=\"XML\" dur=\"10s\" "
-                                "repeatCount=\"indefinite\"\nvalues=\"")
-            self.svg_file.write(anim_path2.getvalue())
             self.svg_file.write("\"/>\n</path>\n")
 
             #elem_c_buf.write("<circle cx=\"\" cy=\"\" r=\"8\">\n"
@@ -219,7 +213,6 @@ class SketchController(object):
             self.svg_file.write("\"/>")
 
         self.svg_file.write("</g>\n</svg>\n")
-        print("hey")
 
     def init_svg(self, width=600.0, height=600.0, margin=50.0):
         self.svg_width = width
@@ -314,7 +307,7 @@ class SketchController(object):
             self._move_y(calc_vy, delta_t)
             self.y += delta_y
 
-    def move_x_and_y(self, delta_x, delta_y, delta_t=0.02):
+    def move_x_and_y(self, delta_x, delta_y, delta_t=0.00002):
         calc_vx = float(delta_x) / float(delta_t)
         calc_vy = float(delta_y) / float(delta_t)
         old_x, old_y = self.x, self.y
@@ -567,11 +560,11 @@ def main():
     try:
         sc = SketchController()
         cs = ClockSketch(sc)
-        for h1 in xrange(11, 14):
+        for h1 in xrange(18, 24):
             h1 = float(h1)
-            for m1 in xrange(0, 60, 20):
+            for m1 in xrange(0, 60, 1):
                 m1 = float(m1)
-                svg1 = cs.refresh_clock(h1, m1, False)
+                svg1 = cs.refresh_clock(h1, m1, True)
                 with open("clocks/clock_{:0>2.0f}_{:0>2.0f}.svg".format(h1, m1), "w") as fd1:
                     fd1.write(str(svg1))
         # sc.move_x_and_y(5.3, 7.9, 0.1)
