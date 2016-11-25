@@ -16,7 +16,6 @@ function calibrate() {
 }
 
 function clockTick() {
-  window.setTimeout(clockTick, 60000);
   var dateNow = new Date();
   var hourNow = dateNow.getHours();
   var minsNow = dateNow.getMinutes();
