@@ -7,6 +7,7 @@ import codecs
 from collections import deque
 import math
 from io import StringIO
+import array
 
 __author__ = 'ethan'
 
@@ -95,23 +96,171 @@ class SketchController(object):
         self.threads = deque()
         self._x_lock = threading.Lock()
         self._y_lock = threading.Lock()
+        self.x_deltas = deque()
+        self.y_deltas = deque()
+        self.x_coords = deque()
+        self.y_coords = deque()
         self.x = 0.0
         self.y = 0.0
+        self.x_coords.append(self.x)
+        self.y_coords.append(self.y)
+        self.x_deltas.append(0.0)
+        self.y_deltas.append(0.0)
         self.heartbeat = HeartbeatSync()
         self.buddysync = BuddySync()
         self.x_move_ts = None
         self.y_move_ts = None
         self.svg_file = StringIO()
-        self.svg_file.write("""<svg width="100%" height="100%" viewBox="0 0 700 700"
-     xmlns="http://www.w3.org/2000/svg">\n
-     <path stroke=\"black\" stroke-width=\"3\" d=\"M 50 50""")
+        self.path_d_val_buffer = StringIO()
+        self.anim_d_val_buffer = StringIO()
+        self.anim_cx_val_buffer = StringIO()
+        self.anim_cy_val_buffer = StringIO()
+        self.buffers = (self.svg_file, self.path_d_val_buffer, self.anim_d_val_buffer, self.anim_cx_val_buffer,
+                        self.anim_cy_val_buffer)
+        self.svg_width = self.svg_height = self.svg_margin = -1.0
+
+    @property
+    def svg_header(self):
+        return "<svg width=\"100%\" height=\"100%\" viewBox=\"0 0 {} {}\" xmlns=\"http://www.w3.org/2000/svg\">" \
+               "\n".format(int(self.svg_width + (2 * self.svg_margin)), int(self.svg_height + (2 * self.svg_margin)))
+
+    def build_svg(self, make_animated=True):
+        self.svg_file.write(self.svg_header)
+        self.svg_file.write("<g transform=\"translate({0} {0})\">\n".format(self.svg_margin))
+
+        # Freeze the deque to a uniform array for that fast address-math access
+        x_deltas_frozen = array.array('f', self.x_deltas)
+        y_deltas_frozen = array.array('f', self.y_deltas)
+        x_coords_frozen = array.array('f', self.x_coords)
+        y_coords_frozen = array.array('f', self.y_coords)
+
+        deltas_len = len(x_deltas_frozen)
+        for delta_i in xrange(0, deltas_len):
+            x_delta_i = x_deltas_frozen[delta_i]
+            y_delta_i = y_deltas_frozen[delta_i]
+            if x_delta_i == 0.0 and y_delta_i == 0.0:
+                segment_str = "M0 0"
+            elif x_delta_i == 0.0:
+                y_delta_i = int(y_delta_i) if y_delta_i % 1.0 == 0.0 else y_delta_i
+                segment_str = "v{}".format(y_delta_i)
+            elif y_delta_i == 0.0:
+                x_delta_i = int(x_delta_i) if x_delta_i % 1.0 == 0.0 else x_delta_i
+                segment_str = "h{}".format(x_delta_i)
+            else:
+                x_delta_i = int(x_delta_i) if x_delta_i % 1.0 == 0.0 else x_delta_i
+                y_delta_i = int(y_delta_i) if y_delta_i % 1.0 == 0.0 else y_delta_i
+                segment_str = "l{} {}".format(x_delta_i, y_delta_i)
+
+            self.path_d_val_buffer.write(segment_str)
+            if make_animated:
+                if not (x_delta_i == 0.0 and y_delta_i == 0.0 and delta_i == 0):
+                    self.anim_d_val_buffer.write(";{}".format(self.path_d_val_buffer.getvalue()))
+
+        if make_animated:
+            anim_path2 = StringIO()
+            anim_path2.write("M0 0l8 0")
+            coords_len = len(x_coords_frozen)
+            for coords_i in xrange(0, coords_len):
+                x_coord_i = x_coords_frozen[coords_i]
+                y_coord_i = y_coords_frozen[coords_i]
+                x_coord_i = int(x_coord_i) if x_coord_i % 1.0 == 0.0 else x_coord_i
+                y_coord_i = int(y_coord_i) if y_coord_i % 1.0 == 0.0 else y_coord_i
+                self.anim_cx_val_buffer.write(";{}".format(x_coord_i))
+                self.anim_cy_val_buffer.write(";{}".format(y_coord_i))
+                anim_path2.write(";M{} {}l8 0".format(x_coord_i, y_coord_i))
+            full_anim_cx = self.anim_cx_val_buffer.getvalue()
+            self.anim_cx_val_buffer.seek(0)
+            self.anim_cx_val_buffer.write("{}".format(self.x_coords[-1]))
+            self.anim_cx_val_buffer.write(full_anim_cx)
+
+            full_anim_cy = self.anim_cy_val_buffer.getvalue()
+            self.anim_cy_val_buffer.seek(0)
+            self.anim_cy_val_buffer.write("{}".format(self.y_coords[-1]))
+            self.anim_cy_val_buffer.write(full_anim_cy)
+
+            full_anim_d = self.anim_d_val_buffer.getvalue()
+            self.anim_d_val_buffer.seek(0)
+            self.anim_d_val_buffer.write(self.path_d_val_buffer.getvalue())
+            self.anim_d_val_buffer.write(full_anim_d)
+
+            elem_c_buf = StringIO()
+            elem_c_buf.write("<circle cx=\"0\" cy=\"0\" r=\"8\">\n "
+                             "<animate attributeName=\"cx\" attributeType=\"XML\" dur=\"10s\" "
+                             "repeatCount=\"indefinite\"\n values=\"")
+            elem_c_buf.write(self.anim_cx_val_buffer.getvalue())
+            elem_c_buf.write("\"/>\n <animate attributeName=\"cy\" attributeType=\"XML\" dur=\"10s\" "
+                             "repeatCount=\"indefinite\"\n values=\"")
+            elem_c_buf.write(self.anim_cy_val_buffer.getvalue())
+            elem_c_buf.write("\"/>\n</circle>\n")
+
+            self.svg_file.write("<path id=\"p1\" stroke=\"black\" stroke-width=\"3\" fill=\"transparent\" d=\"")
+            self.svg_file.write(self.path_d_val_buffer.getvalue())
+            self.svg_file.write("\">\n<animate attributeName=\"d\" attributeType=\"XML\" dur=\"10s\" "
+                                "repeatCount=\"indefinite\"\nvalues=\"")
+            self.svg_file.write(self.anim_d_val_buffer.getvalue())
+            #  self.svg_file.write("\"/>\n<use href=\"#anim1\"/></path>\n")
+            self.svg_file.write("\"/>\n</path>\n")
+
+            self.svg_file.write("<path id=\"p2\" stroke=\"black\" stroke-width=\"8\" fill=\"transparent\" d=\"M0 0\">\n")
+            self.svg_file.write("<animate attributeName=\"d\" attributeType=\"XML\" dur=\"10s\" "
+                                "repeatCount=\"indefinite\"\nvalues=\"")
+            self.svg_file.write(anim_path2.getvalue())
+            self.svg_file.write("\"/>\n</path>\n")
+
+            #elem_c_buf.write("<circle cx=\"\" cy=\"\" r=\"8\">\n"
+            #                 "<animateMotion dur=\"10s\" repeat=\"indefinite\">\n"
+            #                 "<mpath href=\"#p1\"/>\n</animateMotion>\n</circle>\n")
+            self.svg_file.write(elem_c_buf.getvalue())
+            elem_c_buf.close()
+
+        else:  # if not make_animated
+            self.svg_file.write("<path stroke=\"black\" stroke-width=\"3\" fill=\"transparent\" d=\"")
+            self.svg_file.write(self.path_d_val_buffer.getvalue())
+            self.svg_file.write("\"/>")
+
+        self.svg_file.write("</g>\n</svg>\n")
+        print("hey")
+
+    def init_svg(self, width=600.0, height=600.0, margin=50.0):
+        self.svg_width = width
+        self.svg_height = height
+        self.svg_margin = margin
+        self.x_coords.append(0.0)
+        self.y_coords.append(0.0)
+        self.x_deltas.append(0.0)
+        self.y_deltas.append(0.0)
+
+    def finish_svg(self, as_animated):
+        self.svg_file.write(self.path_d_val_buffer.getvalue())
+        if as_animated:
+            self.svg_file.write("""\">\n
+            <animate attributeName=\"d\" attributeType=\"XML\" dur=\"10s\" repeatCount=\"indefinite\"\n
+            values=\"""")
+            self.svg_file.write(self.path_d_val_buffer.getvalue())
+            self.svg_file.write(";")
+            self.svg_file.write(self.anim_d_val_buffer.getvalue())
+            self.svg_file.write("\"/>\n</path>\n</svg>\n")
+        else:
+            self.svg_file.write("\"/>\n</svg>\n")
+
+    def append_path_segment(self, path_ustr):
+        assert self.svg_file.tell() > 0, "You must call init_svg first!"
+
+        self.path_d_val_buffer.write(path_ustr)
+        if self.anim_d_val_buffer.tell() == 0:
+            self.anim_d_val_buffer.write("{}".format(self.path_d_val_buffer.getvalue()))
+        else:
+            self.anim_d_val_buffer.write("; {}".format(self.path_d_val_buffer.getvalue()))
 
     def shake_to_clear(self):
-        self.svg_file.seek(0)
-        self.svg_file.truncate()
-        self.svg_file.write("""<svg width="100%" height="100%" viewBox="0 0 700 700"
-     xmlns="http://www.w3.org/2000/svg">\n
-     <path fill=\"transparent\" stroke=\"black\" stroke-width=\"3\" d=\"M 50 50""")
+        for buf in self.buffers:
+            buf.seek(0)
+            buf.truncate()
+        self.x_deltas.clear()
+        self.y_deltas.clear()
+        self.x_coords.clear()
+        self.y_coords.clear()
+        self.init_svg(width=self.svg_width, height=self.svg_height, margin=self.svg_margin)
 
     def return_to_origin(self):
         raise NotImplementedError
@@ -185,7 +334,11 @@ class SketchController(object):
                 self.threads.append(t2)
 
         self.wait_in_line()
-        self.svg_file.write(""" l {} {}""".format(delta_x, delta_y))
+        self.x_deltas.append(delta_x)
+        self.y_deltas.append(delta_y)
+        self.x_coords.append(self.x)
+        self.y_coords.append(self.y)
+
         print("({},{}) --> ({},{})\n".format(old_x, old_y, self.x, self.y))
 
     def wait_in_line(self):
@@ -198,9 +351,8 @@ class SketchController(object):
     def position(self):
         return self.x, self.y
 
-    def export_svg(self):
-        self.svg_file.write("\"/></svg>\n")
-        result = self.svg_file.getvalue()
+    def export_svg(self, as_animated=True):
+        self.build_svg(make_animated=as_animated)
         return self.svg_file.getvalue()
 
 
@@ -224,6 +376,7 @@ class ClockSketch(object):
         assert isinstance(sketch_controller, SketchController)
         self.sc = sketch_controller
         assert isinstance(self.sc, SketchController)
+        self.sc.init_svg(width=self.width, height=self.height, margin=50.0)
         self.refresh_clock()
 
     def reset(self):
@@ -402,11 +555,11 @@ class ClockSketch(object):
         self.sc.move_x_and_y(0.0, up_or_down * -self.tick_len)
         self.sc.move_x_and_y(-self.tick_len, 0.0)
 
-    def refresh_clock(self, t_hours=3.0, t_minutes=0.1):
+    def refresh_clock(self, t_hours=3.0, t_minutes=0.1, animated=True):
         self.reset()
         self.paint_clockface()
         self.draw_hands(t_hours=t_hours, t_minutes=t_minutes)
-        return self.sc.export_svg()
+        return self.sc.export_svg(as_animated=animated)
 
 
 def main():
@@ -418,8 +571,8 @@ def main():
             h1 = float(h1)
             for m1 in xrange(0, 60, 20):
                 m1 = float(m1)
-                svg1 = cs.refresh_clock(h1, m1)
-                with open("clocks/clock_{}_{}.svg".format(h1, m1), "w") as fd1:
+                svg1 = cs.refresh_clock(h1, m1, False)
+                with open("clocks/clock_{:0>2.0f}_{:0>2.0f}.svg".format(h1, m1), "w") as fd1:
                     fd1.write(str(svg1))
         # sc.move_x_and_y(5.3, 7.9, 0.1)
         # sc.move_x_and_y(2.1, 3.2, 0.2)
