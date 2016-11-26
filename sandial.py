@@ -223,28 +223,6 @@ class SketchController(object):
         self.x_deltas.append(0.0)
         self.y_deltas.append(0.0)
 
-    def finish_svg(self, as_animated):
-        self.svg_file.write(self.path_d_val_buffer.getvalue())
-        if as_animated:
-            self.svg_file.write("""\">\n
-            <animate attributeName=\"d\" attributeType=\"XML\" dur=\"10s\" repeatCount=\"indefinite\"\n
-            values=\"""")
-            self.svg_file.write(self.path_d_val_buffer.getvalue())
-            self.svg_file.write(";")
-            self.svg_file.write(self.anim_d_val_buffer.getvalue())
-            self.svg_file.write("\"/>\n</path>\n</svg>\n")
-        else:
-            self.svg_file.write("\"/>\n</svg>\n")
-
-    def append_path_segment(self, path_ustr):
-        assert self.svg_file.tell() > 0, "You must call init_svg first!"
-
-        self.path_d_val_buffer.write(path_ustr)
-        if self.anim_d_val_buffer.tell() == 0:
-            self.anim_d_val_buffer.write("{}".format(self.path_d_val_buffer.getvalue()))
-        else:
-            self.anim_d_val_buffer.write("; {}".format(self.path_d_val_buffer.getvalue()))
-
     def shake_to_clear(self):
         for buf in self.buffers:
             buf.seek(0)
@@ -339,10 +317,6 @@ class SketchController(object):
             while t.isAlive():
                 t.join(5)
         self.threads.clear()
-
-    @property
-    def position(self):
-        return self.x, self.y
 
     def export_svg(self, as_animated=True):
         self.build_svg(make_animated=as_animated)
@@ -506,7 +480,7 @@ class ClockSketch(object):
 
         elif hour_sector == 2.0:  # 6 <= m < 9
             hour_inner_xf = -hour_inner_slice_opp
-            hour_inner_yf = -hour_inner_slice_adj
+            hour_inner_yf = hour_inner_slice_adj
 
         else:  # 9 <= m < 12
             hour_inner_xf = -hour_inner_slice_adj
@@ -560,7 +534,7 @@ def main():
     try:
         sc = SketchController()
         cs = ClockSketch(sc)
-        for h1 in xrange(18, 24):
+        for h1 in xrange(6, 10):
             h1 = float(h1)
             for m1 in xrange(0, 60, 1):
                 m1 = float(m1)
