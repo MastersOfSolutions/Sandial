@@ -6,15 +6,31 @@
 <style type="text/css">
   body {
     text-align: center;
+    background-color: #121416;
+  }
+  #wrapper {
+    display: inline-block;
+    border: 10px outset #af2424;
+    background-color: #ff1414;
+    padding: 50px;
+    border-radius: 4px;
+    /*box-shadow: inset 0px 0px 29px 17px #ff7373;*/
   }
   #sandial-clock-img {
     display: inline-block;
+    border: 4px inset #ff1414;
+    border-radius: 20px;
+    background-color: #f8f4ea;
+    box-shadow: 0px 0px 29px 17px #ff5757;
   }
 </style>
 </head>
 
 <body>
-  <img id="sandial-clock-img" width="600" height="600" src="">
+  <div id="wrapper">
+    <iframe id="sandial-clock-img" width="550" height="400" src="">
+    </iframe>
+  </div>
 <script type="text/javascript" src="js/sandial-clock.js"></script>
 </body>
 
