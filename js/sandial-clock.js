@@ -46,9 +46,8 @@ function clockTick() {
   var clockImgSrc = clockSrcFormat(dateNow.getHours(), dateNow.getMinutes());
   console.log("Changing clock to " + clockImgSrc);
   clockEl.setAttribute("data", clockImgSrc);
-  clockEl.type = "foo"; // Invalidate the rendered object
+  clockEl.removeAttribute("type"); // Invalidate the rendered object
   clockEl.type = "image/svg+xml";
-  
 }
 
 function handleOnblur(blurEvt) {
