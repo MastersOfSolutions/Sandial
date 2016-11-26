@@ -15,7 +15,7 @@ function stopClock() {
 function validateClock() {
   var dateNow = new Date();
   var clockImgSrcNow = clockSrcFormat(dateNow.getHours(), dateNow.getMinutes());
-  return clockImgSrcNow == clockEl.getAttribute("src");
+  return clockImgSrcNow == clockEl.getAttribute("data");
 }
 
 function startClock() {
@@ -45,7 +45,10 @@ function clockTick() {
   var dateNow = new Date();
   var clockImgSrc = clockSrcFormat(dateNow.getHours(), dateNow.getMinutes());
   console.log("Changing clock to " + clockImgSrc);
-  clockEl.src = clockImgSrc;
+  clockEl.setAttribute("data", clockImgSrc);
+  clockEl.type = "foo"; // Invalidate the rendered object
+  clockEl.type = "image/svg+xml";
+  
 }
 
 function handleOnblur(blurEvt) {
