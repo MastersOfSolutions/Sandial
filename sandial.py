@@ -196,7 +196,7 @@ class SketchController(object):
             self.svg_file.write("<path id=\"p1\" stroke=\"black\" stroke-width=\"3\" fill=\"transparent\" d=\"")
             self.svg_file.write(self.path_d_val_buffer.getvalue())
             self.svg_file.write("\">\n<animate attributeName=\"d\" attributeType=\"XML\" dur=\"10s\" "
-                                "repeatCount=\"0\"\nvalues=\"")
+                                "repeatCount=\"1\"\nvalues=\"")
             self.svg_file.write(self.anim_d_val_buffer.getvalue())
             #  self.svg_file.write("\"/>\n<use href=\"#anim1\"/></path>\n")
             self.svg_file.write("\"/>\n</path>\n")
@@ -534,7 +534,7 @@ def main():
     try:
         sc = SketchController()
         cs = ClockSketch(sc)
-        for h1 in xrange(6, 10):
+        for h1 in xrange(20, 24):
             h1 = float(h1)
             for m1 in xrange(0, 60, 1):
                 m1 = float(m1)
