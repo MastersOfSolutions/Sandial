@@ -14,6 +14,18 @@ __author__ = 'ethan'
 codecs.register(codecs.lookup)  # Fix LookupError thread race condition
 
 
+class BetterStringIO(StringIO):
+    def prewrite(self, *args, **kwargs):
+        temp_cache = self.getvalue()
+        self.seek(0)
+        self.write(*args, **kwargs)
+        self.write(temp_cache)
+
+    def clear(self):
+        self.seek(0)
+        self.truncate()
+
+
 class MovingLockoutError(IOError):
     pass
 
@@ -67,8 +79,13 @@ class BuddySync(object):
 
 
 class PiMotor(object):
+    MOTOR_V = 3.0
+
     def __init__(self, gpio=None, pin_a=None, pin_b=None, pin_c=None):
         self.gpio = gpio
+        self.pin_a = pin_a
+        self.pin_b = pin_b
+        self.pin_c = pin_c
 
     def register(self, io_controller, *pins):
         raise NotImplementedError
@@ -90,6 +107,92 @@ class PiMotor(object):
 
 
 class SketchController(object):
+    DEFAULT_V = 3
+    X_MOTOR_V = 3.0  # The velocity of the x motor
+    Y_MOTOR_V = 3.0  # The velocity of the y motor
+
+    def __init__(self):
+        self.threads = deque()
+        self._x_lock = threading.Lock()
+        self._y_lock = threading.Lock()
+        self.x_motor = PiMotor()
+        self.y_motor = PiMotor()
+
+        # TODO: self.x_motor.register(foo)
+        # TODO: self.y_motor.register(foo)
+        self.x = 0.0
+        self.y = 0.0
+        self.buddysync = BuddySync()
+
+    def shake_to_clear(self):
+        pass
+
+    def return_to_origin(self):
+        self.move_x_and_y(0.0 - self.x, 0.0 - self.y)
+
+    def _move_x(self, delta_x):
+        delta_t = abs(delta_x) / self.x_motor.MOTOR_V
+        will_move = delta_x != 0.0
+
+        # init the direction
+        if delta_x < 0:
+            self.x_motor.counter_clockwise()
+        elif delta_x > 0:
+            self.x_motor.clockwise()
+
+        self.buddysync.buddy_up()
+        if will_move:
+            self.x_motor.start()
+            sleep(delta_t)
+            self.x_motor.stop()
+            self.x += delta_x
+
+    def _move_y(self, delta_y):
+        delta_t = abs(delta_y) / self.y_motor.MOTOR_V
+        will_move = delta_y != 0.0
+
+        # init the direction
+        if delta_y < 0:
+            self.y_motor.counter_clockwise()
+        elif delta_y > 0:
+            self.y_motor.clockwise()
+
+        self.buddysync.buddy_up()
+        if will_move:
+            self.y_motor.start()
+            sleep(delta_t)
+            self.y_motor.stop()
+            self.y += delta_y
+
+    def move_x_and_y(self, delta_x, delta_y):
+        old_x, old_y = self.x, self.y
+
+        with self._x_lock:
+            with self._y_lock:
+                # Kudos to http://stackoverflow.com/a/12376400/4437749
+                t1 = threading.Thread(target=self._move_x, args=(delta_x,))
+                t2 = threading.Thread(target=self._move_y, args=(delta_y,))
+                # Make threads daemonic, i.e. terminate them when main thread
+                # terminates. From: http://stackoverflow.com/a/3788243/145400
+                t1.daemon = True
+                t2.daemon = True
+                t1.start()
+                t2.start()
+                self.threads.append(t1)
+                self.threads.append(t2)
+
+        self.wait_in_line()
+
+        print("({},{}) --> ({},{})\n".format(old_x, old_y, self.x, self.y))
+
+    def wait_in_line(self):
+        for t in self.threads:
+            while t.isAlive():
+                t.join(5)
+        self.threads.clear()
+
+
+class SVGSketchController(object):
     DEFAULT_V = 3
 
     def __init__(self):
@@ -340,9 +443,9 @@ class ClockSketch(object):
         self.height = self.width = 600.0
         self.tick_len = 40.0
         self.mid_y = self.mid_x = self.width / 2.0
-        assert isinstance(sketch_controller, SketchController)
+        assert isinstance(sketch_controller, SVGSketchController)
         self.sc = sketch_controller
-        assert isinstance(self.sc, SketchController)
+        assert isinstance(self.sc, SVGSketchController)
         self.sc.init_svg(width=self.width, height=self.height, margin=50.0)
         self.refresh_clock()
 
@@ -532,7 +635,7 @@ class ClockSketch(object):
 def main():
 
     try:
-        sc = SketchController()
+        sc = SVGSketchController()
         cs = ClockSketch(sc)
         for h1 in xrange(20, 24):
             h1 = float(h1)
