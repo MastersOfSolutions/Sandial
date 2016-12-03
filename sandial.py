@@ -107,28 +107,49 @@ class PiMotor(object):
 
 
 class SketchController(object):
-    DEFAULT_V = 3
-    X_MOTOR_V = 3.0  # The velocity of the x motor
-    Y_MOTOR_V = 3.0  # The velocity of the y motor
-
     def __init__(self):
         self.threads = deque()
         self._x_lock = threading.Lock()
         self._y_lock = threading.Lock()
-        self.x_motor = PiMotor()
-        self.y_motor = PiMotor()
-
-        # TODO: self.x_motor.register(foo)
-        # TODO: self.y_motor.register(foo)
         self.x = 0.0
         self.y = 0.0
         self.buddysync = BuddySync()
 
     def shake_to_clear(self):
-        pass
+        raise NotImplementedError
 
     def return_to_origin(self):
         self.move_x_and_y(0.0 - self.x, 0.0 - self.y)
+
+    def move_x_and_y(self, delta_x, delta_y):
+        raise NotImplementedError
+
+    def wait_in_line(self):
+        for t in self.threads:
+            while t.isAlive():
+                t.join(5)
+        self.threads.clear()
+
+    def _move_x(self, delta_x):
+        raise NotImplementedError
+
+    def _move_y(self, delta_y):
+        raise NotImplementedError
+
+
+class PiSketchController(SketchController):
+    DEFAULT_V = 3
+
+    def __init__(self):
+        super(PiSketchController, self).__init__()
+        self.x_motor = PiMotor()
+        self.y_motor = PiMotor()
+
+        # TODO: self.x_motor.register(foo)
+        # TODO: self.y_motor.register(foo)
+
+    def shake_to_clear(self):
+        pass
 
     def _move_x(self, delta_x):
         delta_t = abs(delta_x) / self.x_motor.MOTOR_V
@@ -192,25 +213,19 @@ class SketchController(object):
         self.threads.clear()
 
 
-class SVGSketchController(object):
+class SVGSketchController(SketchController):
     DEFAULT_V = 3
 
     def __init__(self):
-        self.threads = deque()
-        self._x_lock = threading.Lock()
-        self._y_lock = threading.Lock()
+        super(SVGSketchController, self).__init__()
         self.x_deltas = deque()
         self.y_deltas = deque()
         self.x_coords = deque()
         self.y_coords = deque()
-        self.x = 0.0
-        self.y = 0.0
         self.x_coords.append(self.x)
         self.y_coords.append(self.y)
         self.x_deltas.append(0.0)
         self.y_deltas.append(0.0)
-        self.heartbeat = HeartbeatSync()
-        self.buddysync = BuddySync()
         self.x_move_ts = None
         self.y_move_ts = None
         self.svg_file = StringIO()
@@ -336,9 +351,6 @@ class SVGSketchController(object):
         self.y_coords.clear()
         self.init_svg(width=self.svg_width, height=self.svg_height, margin=self.svg_margin)
 
-    def return_to_origin(self):
-        raise NotImplementedError
-
     def print_move_deltas(self):
         move_delta = self.y_move_ts - self.x_move_ts
         if move_delta.days < 0:
@@ -348,56 +360,39 @@ class SVGSketchController(object):
             delta_log = "x --> +{}s --> y".format(move_delta.seconds + (move_delta.microseconds / 1000000.0))
         print(delta_log)
 
-    def _move_x(self, v_x, t):
+    def _move_x(self, delta_x):
         self.buddysync.buddy_up()
         move_ts = datetime.datetime.now()
         self.x_move_ts = move_ts
-
+        t = 0.00000002
         sleep(t)
         if self.x_move_ts and self.y_move_ts:
             self.print_move_deltas()
-        calc_delta_x = v_x * t
-        self.x += calc_delta_x
-        # TODO: implement the motion
+        # calc_delta_x = v_x * t
+        self.x += delta_x
 
-    def move_x(self, delta_x, delta_t=0.5):
-        calc_vx = float(delta_x) / float(delta_t)
-
-        with self._x_lock:
-            self._move_x(calc_vx, delta_t)
-            self.x += delta_x
-
-    def _move_y(self, v_y, t):
+    def _move_y(self, delta_y):
         # self.heartbeat.heartbeat_sync()
         self.buddysync.buddy_up()
         move_ts = datetime.datetime.now()
         self.y_move_ts = move_ts
         # print("starting _move_y {}\n".format(move_ts))
+        t = 0.00000002
         sleep(t)
         # print("done _move_y {}\n".format(datetime.datetime.now()))
         if self.x_move_ts and self.y_move_ts:
             self.print_move_deltas()
-        calc_delta_y = v_y * t
-        self.y += calc_delta_y
-        # TODO: implement the motion
+        # calc_delta_y = v_y * t
+        self.y += delta_y
 
-    def move_y(self, delta_y, delta_t=0.5):
-        calc_vy = float(delta_y) / float(delta_t)
-
-        with self._y_lock:
-            self._move_y(calc_vy, delta_t)
-            self.y += delta_y
-
-    def move_x_and_y(self, delta_x, delta_y, delta_t=0.00002):
-        calc_vx = float(delta_x) / float(delta_t)
-        calc_vy = float(delta_y) / float(delta_t)
+    def move_x_and_y(self, delta_x, delta_y):
         old_x, old_y = self.x, self.y
 
         with self._x_lock:
             with self._y_lock:
                 # Kudos to http://stackoverflow.com/a/12376400/4437749
-                t1 = threading.Thread(target=self._move_x, args=(calc_vx, delta_t))
-                t2 = threading.Thread(target=self._move_y, args=(calc_vy, delta_t))
+                t1 = threading.Thread(target=self._move_x, args=(delta_x,))
+                t2 = threading.Thread(target=self._move_y, args=(delta_y,))
                 # Make threads daemonic, i.e. terminate them when main thread
                 # terminates. From: http://stackoverflow.com/a/3788243/145400
                 t1.daemon = True
@@ -414,12 +409,6 @@ class SVGSketchController(object):
         self.y_coords.append(self.y)
 
         print("({},{}) --> ({},{})\n".format(old_x, old_y, self.x, self.y))
-
-    def wait_in_line(self):
-        for t in self.threads:
-            while t.isAlive():
-                t.join(5)
-        self.threads.clear()
 
     def export_svg(self, as_animated=True):
         self.build_svg(make_animated=as_animated)
@@ -443,13 +432,10 @@ class ClockSketch(object):
         self.height = self.width = 600.0
         self.tick_len = 40.0
         self.mid_y = self.mid_x = self.width / 2.0
-        assert isinstance(sketch_controller, SVGSketchController)
         self.sc = sketch_controller
-        assert isinstance(self.sc, SVGSketchController)
-        self.sc.init_svg(width=self.width, height=self.height, margin=50.0)
-        self.refresh_clock()
 
     def reset(self):
+        # self.sc.return_to_origin()
         delta_x_orig = self.origin_x - self.sc.x
         delta_y_orig = self.origin_y - self.sc.y
         self.sc.move_x_and_y(delta_x_orig, delta_y_orig)
@@ -625,10 +611,32 @@ class ClockSketch(object):
         self.sc.move_x_and_y(0.0, up_or_down * -self.tick_len)
         self.sc.move_x_and_y(-self.tick_len, 0.0)
 
-    def refresh_clock(self, t_hours=3.0, t_minutes=0.1, animated=True):
+    def _refresh_clock(self, t_hours=3.0, t_minutes=0.1, animated=True):
         self.reset()
         self.paint_clockface()
         self.draw_hands(t_hours=t_hours, t_minutes=t_minutes)
+
+    def refresh_clock(self, t_hours=3.0, t_minutes=0.1, animated=True):
+        self._refresh_clock(t_hours=t_hours, t_minutes=t_minutes, animated=animated)
+        return None
+
+
+class PiClockSketch(ClockSketch):
+    def __init__(self, sketch_controller):
+        super(PiClockSketch, self).__init__(sketch_controller)
+        assert isinstance(self.sc, PiSketchController)
+        self.refresh_clock()
+
+
+class SVGClockSketch(ClockSketch):
+    def __init__(self, sketch_controller):
+        super(SVGClockSketch, self).__init__(sketch_controller)
+        assert isinstance(self.sc, SVGSketchController)
+        self.sc.init_svg(width=self.width, height=self.height, margin=50.0)
+        self.refresh_clock()
+
+    def refresh_clock(self, t_hours=3.0, t_minutes=0.1, animated=True):
+        self._refresh_clock(t_hours=t_hours, t_minutes=t_minutes, animated=animated)
         return self.sc.export_svg(as_animated=animated)
 
 
@@ -636,10 +644,10 @@ def main():
 
     try:
         sc = SVGSketchController()
-        cs = ClockSketch(sc)
+        cs = SVGClockSketch(sc)
         for h1 in xrange(20, 24):
             h1 = float(h1)
-            for m1 in xrange(0, 60, 1):
+            for m1 in xrange(0, 60, 15):
                 m1 = float(m1)
                 svg1 = cs.refresh_clock(h1, m1, True)
                 with open("clocks/clock_{:0>2.0f}_{:0>2.0f}.svg".format(h1, m1), "w") as fd1:
