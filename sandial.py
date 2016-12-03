@@ -643,11 +643,12 @@ class SVGClockSketch(ClockSketch):
 def main():
 
     try:
-        sc = SVGSketchController()
-        cs = SVGClockSketch(sc)
+
         for h1 in xrange(20, 24):
+            sc = SVGSketchController()
+            cs = SVGClockSketch(sc)
             h1 = float(h1)
-            for m1 in xrange(0, 60, 15):
+            for m1 in xrange(0, 60, 1):
                 m1 = float(m1)
                 svg1 = cs.refresh_clock(h1, m1, True)
                 with open("clocks/clock_{:0>2.0f}_{:0>2.0f}.svg".format(h1, m1), "w") as fd1:
