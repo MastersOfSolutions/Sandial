@@ -651,7 +651,7 @@ def main():
             for m1 in xrange(0, 60, 1):
                 m1 = float(m1)
                 svg1 = cs.refresh_clock(h1, m1, True)
-                with open("clocks/clock_{:0>2.0f}_{:0>2.0f}.svg".format(h1, m1), "w") as fd1:
+                with open("../../clocks/clock_{:0>2.0f}_{:0>2.0f}.svg".format(h1, m1), "w") as fd1:
                     fd1.write(str(svg1))
         # sc.move_x_and_y(5.3, 7.9, 0.1)
         # sc.move_x_and_y(2.1, 3.2, 0.2)
