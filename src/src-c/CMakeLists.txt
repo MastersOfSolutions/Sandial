@@ -1,0 +1,13 @@
+cmake_minimum_required(VERSION 3.3)
+project(sandialc)
+
+# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Werror")
+if (APPLE)
+    message(WARNING "Compiling on an Apple Device. Expect fatal undefined symbols")
+    set(WIRING_PI_ROOT ../../external/wiringPi)
+    set(WIRING_PI_DIRS ${WIRING_PI_ROOT}/gpio ${WIRING_PI_ROOT}/wiringPi)
+    include_directories (${WIRING_PI_DIRS})
+endif (APPLE)
+set(SOURCE_FILES main.c)
+add_executable(sandialc ${SOURCE_FILES})
